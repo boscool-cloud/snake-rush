@@ -322,7 +322,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
     <div class="admin-section">
       <h3>👤 玩家数据</h3>
       <table class="admin-table" id="admin-player-table">
-        <thead><tr><th>玩家</th><th>分数</th><th>皮肤</th><th>邀请</th><th>时间</th></tr></thead>
+        <thead><tr><th>玩家</th><th>电话</th><th>分数</th><th>皮肤</th><th>时间</th></tr></thead>
         <tbody id="admin-table-body"></tbody>
       </table>
     </div>
@@ -671,6 +671,7 @@ function endGame() {
   const session = {
     id: 'S'+ Date.now(),
     name: state.playerName || 'Anonymous',
+    phone: state.playerPhone || '—',
     score,
     skin: getSkin().name,
     skinId: state.currentSkin,
@@ -707,7 +708,7 @@ function showGameOver() {
 
 function submitAndRestart() {
   const n = document.getElementById('player-name-input').value.trim();
-  startGame(n || 'Anonymous');
+  startGame(n || state.playerName || 'Anonymous');
 }
 
 function shareAfterGame() {
@@ -721,16 +722,44 @@ function shareAfterGame() {
 }
 
 function showStartScreen() {
+  const savedName = state.playerName || '';
+  const savedPhone = state.playerPhone || '';
   document.getElementById('overlay-content').innerHTML = `
     <h2 style="color:var(--accent);animation:glow 2s infinite">🐍 Snake Rush</h2>
-    <p style="margin:8px 0;font-size:13px;color:var(--text2)">U宝主题贪吃蛇升级版</p>
-    <div id="name-input-wrap">
-      <input id="player-name-input" type="text" placeholder="输入你的名字" maxlength="16" value="${state.playerName||''}">
+    <p style="margin:8px 0 16px;font-size:13px;color:var(--text2)">U宝主题贪吃蛇升级版</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+      <div style="text-align:left;">
+        <label style="font-size:12px;color:var(--text2);margin-bottom:4px;display:block;">👤 名字 *</label>
+        <input id="player-name-input" type="text" placeholder="请输入你的名字" maxlength="16" value="${savedName}"
+          style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+      </div>
+      <div style="text-align:left;">
+        <label style="font-size:12px;color:var(--text2);margin-bottom:4px;display:block;">📱 电话号码 *</label>
+        <input id="player-phone-input" type="tel" placeholder="请输入电话号码（如：0123456789）" maxlength="15" value="${savedPhone}"
+          style="width:100%;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+      </div>
     </div>
-    <button class="btn btn-primary" onclick="submitAndRestart()" style="font-size:16px;padding:12px 32px">🎮 开始游戏</button>
-    <p style="font-size:11px;color:var(--text2);margin-top:12px">键盘 WASD/方向键 或 滑动控制</p>
+    <button class="btn btn-primary" onclick="submitStart()" style="font-size:16px;padding:12px 32px;width:100%">🎮 开始游戏</button>
+    <p style="font-size:11px;color:var(--text2);margin-top:10px">键盘 WASD/方向键 或 滑动控制</p>
   `;
   document.getElementById('overlay').style.display = 'flex';
+}
+
+function submitStart() {
+  const name = document.getElementById('player-name-input').value.trim();
+  const phone = document.getElementById('player-phone-input').value.trim();
+  if(!name) { highlightError('player-name-input','请输入名字！'); return; }
+  if(!phone || !/^[0-9+\-\s]{7,15}$/.test(phone)) { highlightError('player-phone-input','请输入有效电话号码！'); return; }
+  state.playerPhone = phone;
+  startGame(name);
+}
+
+function highlightError(id, msg) {
+  const el = document.getElementById(id);
+  el.style.borderColor = 'var(--danger)';
+  el.style.boxShadow = '0 0 8px rgba(255,51,102,0.5)';
+  showToast('⚠️ ' + msg, 2000);
+  setTimeout(()=>{ el.style.borderColor=''; el.style.boxShadow=''; }, 2000);
 }
 
 // ============================================================
@@ -744,11 +773,39 @@ function draw() {
   }
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Grid
-  ctx.strokeStyle = 'rgba(40,40,80,0.4)';
+  // Grid (subtle inner lines)
+  ctx.strokeStyle = 'rgba(40,40,100,0.35)';
   ctx.lineWidth = .5;
   for(let x=0;x<=COLS;x++) { ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,canvas.height);ctx.stroke(); }
   for(let y=0;y<=ROWS;y++) { ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(canvas.width,y*CELL);ctx.stroke(); }
+
+  // Danger zone: red glow near walls
+  const dangerW = CELL * 1.5;
+  const grad_top = ctx.createLinearGradient(0,0,0,dangerW);
+  grad_top.addColorStop(0,'rgba(255,51,102,0.25)'); grad_top.addColorStop(1,'rgba(255,51,102,0)');
+  ctx.fillStyle = grad_top; ctx.fillRect(0,0,canvas.width,dangerW);
+  const grad_bot = ctx.createLinearGradient(0,canvas.height-dangerW,0,canvas.height);
+  grad_bot.addColorStop(0,'rgba(255,51,102,0)'); grad_bot.addColorStop(1,'rgba(255,51,102,0.25)');
+  ctx.fillStyle = grad_bot; ctx.fillRect(0,canvas.height-dangerW,canvas.width,dangerW);
+  const grad_left = ctx.createLinearGradient(0,0,dangerW,0);
+  grad_left.addColorStop(0,'rgba(255,51,102,0.25)'); grad_left.addColorStop(1,'rgba(255,51,102,0)');
+  ctx.fillStyle = grad_left; ctx.fillRect(0,0,dangerW,canvas.height);
+  const grad_right = ctx.createLinearGradient(canvas.width-dangerW,0,canvas.width,0);
+  grad_right.addColorStop(0,'rgba(255,51,102,0)'); grad_right.addColorStop(1,'rgba(255,51,102,0.25)');
+  ctx.fillStyle = grad_right; ctx.fillRect(canvas.width-dangerW,0,dangerW,canvas.height);
+
+  // Bright neon border
+  ctx.save();
+  ctx.strokeStyle = '#ff3366';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = '#ff3366';
+  ctx.shadowBlur = 14;
+  ctx.strokeRect(1.5, 1.5, canvas.width-3, canvas.height-3);
+  ctx.strokeStyle = 'rgba(255,100,150,0.4)';
+  ctx.lineWidth = 8;
+  ctx.shadowBlur = 30;
+  ctx.strokeRect(4, 4, canvas.width-8, canvas.height-8);
+  ctx.restore();
 
   // Final push effect
   if(finalPushMode) {
@@ -1060,9 +1117,9 @@ function renderAdmin() {
   sessions.slice(-10).reverse().forEach(s => {
     tbody.innerHTML += `<tr>
       <td>${s.name||'—'}</td>
+      <td style="color:var(--neon-blue)">${s.phone||'—'}</td>
       <td style="color:var(--accent)">${s.score}</td>
       <td>${s.skin||'—'}</td>
-      <td>${totalRefs}</td>
       <td>${s.date||'—'}</td>
     </tr>`;
   });
@@ -1090,7 +1147,7 @@ function renderAdmin() {
 
 function exportCSV() {
   const sessions = state.sessions||[];
-  const rows = [['Name','Score','Skin','Date','Session ID'],...sessions.map(s=>[s.name,s.score,s.skin,s.date,s.id])];
+  const rows = [['Name','Phone','Score','Skin','Date','Session ID'],...sessions.map(s=>[s.name,s.phone||'—',s.score,s.skin,s.date,s.id])];
   const csv = rows.map(r=>r.join(',')).join('\n');
   const blob = new Blob([csv],{type:'text/csv'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='snake_rush_data.csv'; a.click();
