@@ -814,14 +814,11 @@ function draw() {
     ctx.shadowBlur = 20;
   }
 
-  // Food
-  if(food) drawItem(food.x, food.y, '🍎', '#ff4444');
-  if(golden) drawItem(golden.x, golden.y, '⭐', '#ffd700');
-  if(poison) drawItem(poison.x, poison.y, '☠️', '#ff33aa');
-  if(powerup) {
-    const icons = {boost:'⚡',slow:'🐌',ghost:'👻',magnet:'🧲'};
-    drawItem(powerup.x, powerup.y, icons[powerup.type]||'?', '#ffffff');
-  }
+  // Food — all pure canvas shapes (no emoji, fixes mobile blur)
+  if(food) drawFood(food.x, food.y);
+  if(golden) drawGolden(golden.x, golden.y);
+  if(poison) drawPoison(poison.x, poison.y);
+  if(powerup) drawPowerup(powerup.x, powerup.y, powerup.type);
 
   // Snake
   const skin = getSkin();
@@ -878,28 +875,190 @@ function draw() {
 
   // Effect HUD overlay
   if(activeEffect) {
+    const labels = {boost:'BOOST',slow:'SLOW',ghost:'GHOST',magnet:'MAGNET'};
+    const colors = {boost:'#f5c518',slow:'#00d4ff',ghost:'#ffffff',magnet:'#ff6b35'};
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(4, 4, 90, 20);
-    ctx.fillStyle = '#fff';
-    ctx.font = `${Math.max(10,CELL*.6)}px sans-serif`;
-    const labels = {boost:'⚡ BOOST',slow:'🐌 SLOW',ghost:'👻 GHOST',magnet:'🧲 MAGNET'};
-    ctx.fillText(labels[activeEffect]||activeEffect, 8, 18);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(4,4,96,22,6); ctx.fill();
+    ctx.fillStyle = colors[activeEffect]||'#fff';
+    ctx.font = `bold ${Math.max(11,CELL*.55)}px sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('● ' + (labels[activeEffect]||activeEffect), 10, 15);
     ctx.restore();
   }
 
   requestAnimationFrame(draw);
 }
 
-function drawItem(gx, gy, emoji, glow) {
+// ── ITEM DRAWING (pure canvas, no emoji — fixes mobile blur) ──────────────
+
+function itemCenter(gx, gy) {
+  return { cx: gx*CELL + CELL/2, cy: gy*CELL + CELL/2, r: CELL*0.38 };
+}
+
+function glowCircle(cx, cy, r, color) {
   ctx.save();
-  ctx.shadowColor = glow;
-  ctx.shadowBlur = 12;
-  ctx.font = `${Math.floor(CELL*.75)}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(emoji, gx*CELL+CELL/2, gy*CELL+CELL/2);
+  ctx.shadowColor = color; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
   ctx.restore();
+}
+
+// 🍎 Food → red circle with white shine dot
+function drawFood(gx, gy) {
+  const {cx,cy,r} = itemCenter(gx,gy);
+  ctx.save();
+  ctx.shadowColor = '#ff4444'; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = '#ff3333'; ctx.fill();
+  // shine
+  ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.arc(cx - r*0.3, cy - r*0.3, r*0.22, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.fill();
+  // stem
+  ctx.strokeStyle = '#44cc00'; ctx.lineWidth = Math.max(1.5, CELL*0.08);
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx, cy-r); ctx.lineTo(cx+r*0.2, cy-r*1.4);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ⭐ Golden → bright spinning star
+function drawGolden(gx, gy) {
+  const {cx,cy,r} = itemCenter(gx,gy);
+  ctx.save();
+  ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 18;
+  ctx.translate(cx, cy);
+  ctx.rotate((Date.now()/800) % (Math.PI*2));  // slow spin
+  drawStar(0, 0, 5, r, r*0.45, '#ffd700', '#ff9900');
+  ctx.restore();
+}
+
+function drawStar(x, y, pts, outerR, innerR, fill, stroke) {
+  ctx.beginPath();
+  for(let i=0;i<pts*2;i++) {
+    const angle = (i*Math.PI/pts) - Math.PI/2;
+    const rad = i%2===0 ? outerR : innerR;
+    i===0 ? ctx.moveTo(x+Math.cos(angle)*rad, y+Math.sin(angle)*rad)
+           : ctx.lineTo(x+Math.cos(angle)*rad, y+Math.sin(angle)*rad);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=1.5; ctx.stroke(); }
+}
+
+// ☠️ Poison → purple circle with X
+function drawPoison(gx, gy) {
+  const {cx,cy,r} = itemCenter(gx,gy);
+  ctx.save();
+  ctx.shadowColor = '#cc00ff'; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = '#660099'; ctx.fill();
+  ctx.strokeStyle = '#ff33ff'; ctx.lineWidth = Math.max(1.5, CELL*0.1);
+  ctx.fill(); ctx.strokeStyle = '#ee00ee'; ctx.lineWidth = 1.5; ctx.stroke();
+  // X mark
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ff99ff'; ctx.lineWidth = Math.max(1.5, CELL*0.09);
+  ctx.lineCap = 'round';
+  const o = r*0.45;
+  ctx.beginPath(); ctx.moveTo(cx-o,cy-o); ctx.lineTo(cx+o,cy+o); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx+o,cy-o); ctx.lineTo(cx-o,cy+o); ctx.stroke();
+  ctx.restore();
+}
+
+// Powerups — each has a unique shape + color
+function drawPowerup(gx, gy, type) {
+  const {cx,cy,r} = itemCenter(gx,gy);
+  const pulse = 0.9 + 0.1*Math.sin(Date.now()/250);  // pulsing size
+  const pr = r * pulse;
+
+  ctx.save();
+  if(type==='boost')  drawBoost(cx, cy, pr);
+  if(type==='slow')   drawSlow(cx, cy, pr);
+  if(type==='ghost')  drawGhost(cx, cy, pr);
+  if(type==='magnet') drawMagnet(cx, cy, pr);
+  ctx.restore();
+}
+
+// ⚡ Boost → yellow lightning bolt
+function drawBoost(cx, cy, r) {
+  ctx.shadowColor = '#f5c518'; ctx.shadowBlur = 16;
+  ctx.fillStyle = '#f5c518';
+  ctx.beginPath();
+  const s = r;
+  ctx.moveTo(cx+s*0.2, cy-s);
+  ctx.lineTo(cx-s*0.3, cy+s*0.1);
+  ctx.lineTo(cx+s*0.1, cy+s*0.1);
+  ctx.lineTo(cx-s*0.2, cy+s);
+  ctx.lineTo(cx+s*0.3, cy-s*0.1);
+  ctx.lineTo(cx-s*0.1, cy-s*0.1);
+  ctx.closePath(); ctx.fill();
+}
+
+// 🐌 Slow → cyan clock/spiral circle
+function drawSlow(cx, cy, r) {
+  ctx.shadowColor = '#00d4ff'; ctx.shadowBlur = 14;
+  // outer ring
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = '#003355'; ctx.fill();
+  ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2; ctx.stroke();
+  // clock hands
+  ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = Math.max(1.5, r*0.15); ctx.lineCap='round';
+  ctx.shadowBlur = 0;
+  const t = Date.now()/1000;
+  // minute hand
+  ctx.beginPath(); ctx.moveTo(cx,cy);
+  ctx.lineTo(cx + Math.cos(t)*r*0.6, cy + Math.sin(t)*r*0.6); ctx.stroke();
+  // hour hand
+  ctx.beginPath(); ctx.moveTo(cx,cy);
+  ctx.lineTo(cx + Math.cos(t*0.3)*r*0.4, cy + Math.sin(t*0.3)*r*0.4); ctx.stroke();
+  // center dot
+  ctx.fillStyle = '#00d4ff';
+  ctx.beginPath(); ctx.arc(cx,cy,r*0.12,0,Math.PI*2); ctx.fill();
+}
+
+// 👻 Ghost → white ghost silhouette
+function drawGhost(cx, cy, r) {
+  ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 16;
+  ctx.fillStyle = 'rgba(220,220,255,0.9)';
+  ctx.beginPath();
+  // top arc (head)
+  ctx.arc(cx, cy - r*0.1, r*0.7, Math.PI, 0, false);
+  // right side down + wavy bottom
+  ctx.lineTo(cx + r*0.7, cy + r*0.75);
+  ctx.quadraticCurveTo(cx + r*0.45, cy + r*0.45, cx + r*0.2, cy + r*0.75);
+  ctx.quadraticCurveTo(cx, cy + r*0.5, cx - r*0.2, cy + r*0.75);
+  ctx.quadraticCurveTo(cx - r*0.45, cy + r*0.45, cx - r*0.7, cy + r*0.75);
+  ctx.lineTo(cx - r*0.7, cy - r*0.1);
+  ctx.closePath(); ctx.fill();
+  // eyes
+  ctx.shadowBlur = 0; ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(cx - r*0.25, cy - r*0.05, r*0.12, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + r*0.25, cy - r*0.05, r*0.12, 0, Math.PI*2); ctx.fill();
+}
+
+// 🧲 Magnet → classic U-shape magnet with red/blue poles
+function drawMagnet(cx, cy, r) {
+  ctx.shadowColor = '#ff6b35'; ctx.shadowBlur = 14;
+  const lw = r * 0.38;
+  ctx.lineWidth = lw; ctx.lineCap = 'round';
+  // U arc
+  ctx.beginPath();
+  ctx.arc(cx, cy + r*0.15, r*0.5, Math.PI, 0, true);
+  ctx.strokeStyle = '#aaaaaa'; ctx.stroke();
+  // left leg (blue = north)
+  ctx.strokeStyle = '#3399ff'; ctx.lineWidth = lw;
+  ctx.lineCap = 'square';
+  ctx.beginPath();
+  ctx.moveTo(cx - r*0.5, cy + r*0.15);
+  ctx.lineTo(cx - r*0.5, cy - r*0.65);
+  ctx.stroke();
+  // right leg (red = south)
+  ctx.strokeStyle = '#ff3333';
+  ctx.beginPath();
+  ctx.moveTo(cx + r*0.5, cy + r*0.15);
+  ctx.lineTo(cx + r*0.5, cy - r*0.65);
+  ctx.stroke();
 }
 
 function spawnParticles(gx, gy, n, color) {
